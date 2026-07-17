@@ -1,0 +1,13 @@
+embedding_size: 64
+req_training: False
+epochs: 1
+use_neg_sampling: False
+
+mmgf_alpha: 0.7
+mmgf_adjustment: 0.6
+mmgf_knn_k: 20
+mmgf_coefficients: null
+mmgf_beta: null
+mmgf_gamma: null
+
+hyper_parameters: ["seed"]

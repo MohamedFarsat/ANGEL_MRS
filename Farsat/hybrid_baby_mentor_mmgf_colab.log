@@ -1,0 +1,348 @@
+08 Jul 08:31    INFO 
+gpu_id=0
+use_gpu=True
+seed=999
+data_path=../data/
+inter_splitting_label=x_label
+filter_out_cod_start_users=True
+is_multimodal_model=True
+checkpoint_dir=saved
+save_recommended_topk=False
+recommend_topk=recommend_topk/
+embedding_size=64
+weight_decay=0.0
+req_training=True
+epochs=1000
+stopping_step=20
+train_batch_size=2048
+learner=adam
+learning_rate=0.0001
+learning_rate_scheduler=[1.0, 50]
+eval_step=1
+training_neg_sample_num=1
+use_neg_sampling=True
+use_full_sampling=False
+NEG_PREFIX=neg__
+USER_ID_FIELD=userID
+ITEM_ID_FIELD=itemID
+TIME_FIELD=timestamp
+field_separator=	
+metrics=['Recall', 'NDCG']
+topk=[10, 20]
+valid_metric=Recall@20
+eval_batch_size=4096
+use_raw_features=False
+max_txt_len=32
+max_img_size=256
+vocab_size=30522
+type_vocab_size=2
+hidden_size=4
+pad_token_id=0
+max_position_embeddings=512
+layer_norm_eps=1e-12
+hidden_dropout_prob=0.1
+end2end=False
+hyper_parameters=['seed', 'reg_weight', 'learning_rate', 'dropout', 'mask_weight_f', 'mask_weight_g', 'align_weight', 'temp']
+inter_file_name=baby.inter
+vision_feature_file=image_feat.npy
+text_feature_file=text_feat.npy
+user_graph_dict_file=user_graph_dict.npy
+feat_embed_dim=64
+n_mm_layers=1
+n_layers=2
+knn_k=10
+mm_image_weight=0.1
+reg_weight=0.001
+dropout=0.5
+mask_weight_f=1.5
+mask_weight_g=0.0001
+align_weight=0.1
+temp=0.2
+blend_weight_grid=[0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
+blend_calibration=zscore
+blend_valid_metric=Recall@20
+model=MENTOR
+dataset=baby
+valid_metric_bigger=True
+device=cuda
+
+
+/usr/local/lib/python3.12/dist-packages/torch/_utils.py:358: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+  result = torch.sparse_coo_tensor(
+08 Jul 08:32    INFO MENTOR(
+  (mlp): Linear(in_features=128, out_features=128, bias=True)
+  (image_embedding): Embedding(7050, 4096)
+  (image_trs): Linear(in_features=4096, out_features=64, bias=True)
+  (text_embedding): Embedding(7050, 384)
+  (text_trs): Linear(in_features=384, out_features=64, bias=True)
+  (v_gcn): GCN(
+    (MLP): Linear(in_features=4096, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (v_gcn_n1): GCN(
+    (MLP): Linear(in_features=4096, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (v_gcn_n2): GCN(
+    (MLP): Linear(in_features=4096, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (t_gcn): GCN(
+    (MLP): Linear(in_features=384, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (t_gcn_n1): GCN(
+    (MLP): Linear(in_features=384, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (t_gcn_n2): GCN(
+    (MLP): Linear(in_features=384, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+  (id_gcn): GCN(
+    (MLP): Linear(in_features=64, out_features=256, bias=True)
+    (MLP_1): Linear(in_features=256, out_features=64, bias=True)
+    (conv_embed_1): Base_gcn(64, 64)
+  )
+)
+Trainable parameters: 44662762
+08 Jul 08:32    INFO epoch 0 training [time: 17.47s, train loss: 208.0630]
+08 Jul 08:32    INFO epoch 0 validation: recall@10: 0.0309    recall@20: 0.0495    ndcg@10: 0.0169    ndcg@20: 0.0216    
+08 Jul 08:32    INFO MENTOR best validation updated.
+08 Jul 08:32    INFO epoch 1 training [time: 16.40s, train loss: 202.2544]
+08 Jul 08:32    INFO epoch 1 validation: recall@10: 0.0352    recall@20: 0.0569    ndcg@10: 0.0189    ndcg@20: 0.0243    
+08 Jul 08:32    INFO MENTOR best validation updated.
+08 Jul 08:33    INFO epoch 2 training [time: 16.74s, train loss: 200.9808]
+08 Jul 08:33    INFO epoch 2 validation: recall@10: 0.0403    recall@20: 0.0660    ndcg@10: 0.0211    ndcg@20: 0.0276    
+08 Jul 08:33    INFO MENTOR best validation updated.
+08 Jul 08:33    INFO epoch 3 training [time: 17.13s, train loss: 197.9445]
+08 Jul 08:33    INFO epoch 3 validation: recall@10: 0.0445    recall@20: 0.0708    ndcg@10: 0.0231    ndcg@20: 0.0298    
+08 Jul 08:33    INFO MENTOR best validation updated.
+08 Jul 08:33    INFO epoch 4 training [time: 17.51s, train loss: 195.6334]
+08 Jul 08:33    INFO epoch 4 validation: recall@10: 0.0474    recall@20: 0.0752    ndcg@10: 0.0247    ndcg@20: 0.0318    
+08 Jul 08:33    INFO MENTOR best validation updated.
+08 Jul 08:33    INFO epoch 5 training [time: 18.07s, train loss: 193.9363]
+08 Jul 08:34    INFO epoch 5 validation: recall@10: 0.0486    recall@20: 0.0779    ndcg@10: 0.0256    ndcg@20: 0.0330    
+08 Jul 08:34    INFO MENTOR best validation updated.
+08 Jul 08:34    INFO epoch 6 training [time: 17.72s, train loss: 192.3480]
+08 Jul 08:34    INFO epoch 6 validation: recall@10: 0.0496    recall@20: 0.0800    ndcg@10: 0.0261    ndcg@20: 0.0339    
+08 Jul 08:34    INFO MENTOR best validation updated.
+08 Jul 08:34    INFO epoch 7 training [time: 17.47s, train loss: 191.3357]
+08 Jul 08:34    INFO epoch 7 validation: recall@10: 0.0516    recall@20: 0.0804    ndcg@10: 0.0270    ndcg@20: 0.0343    
+08 Jul 08:34    INFO MENTOR best validation updated.
+08 Jul 08:34    INFO epoch 8 training [time: 17.92s, train loss: 190.0499]
+08 Jul 08:34    INFO epoch 8 validation: recall@10: 0.0517    recall@20: 0.0826    ndcg@10: 0.0274    ndcg@20: 0.0353    
+08 Jul 08:34    INFO MENTOR best validation updated.
+08 Jul 08:35    INFO epoch 9 training [time: 18.08s, train loss: 189.1437]
+08 Jul 08:35    INFO epoch 9 validation: recall@10: 0.0527    recall@20: 0.0838    ndcg@10: 0.0281    ndcg@20: 0.0360    
+08 Jul 08:35    INFO MENTOR best validation updated.
+08 Jul 08:35    INFO epoch 10 training [time: 17.71s, train loss: 188.5052]
+08 Jul 08:35    INFO epoch 10 validation: recall@10: 0.0535    recall@20: 0.0848    ndcg@10: 0.0286    ndcg@20: 0.0366    
+08 Jul 08:35    INFO MENTOR best validation updated.
+08 Jul 08:35    INFO epoch 11 training [time: 17.61s, train loss: 187.8065]
+08 Jul 08:35    INFO epoch 11 validation: recall@10: 0.0547    recall@20: 0.0852    ndcg@10: 0.0289    ndcg@20: 0.0367    
+08 Jul 08:35    INFO MENTOR best validation updated.
+08 Jul 08:36    INFO epoch 12 training [time: 17.94s, train loss: 187.2932]
+08 Jul 08:36    INFO epoch 12 validation: recall@10: 0.0551    recall@20: 0.0864    ndcg@10: 0.0294    ndcg@20: 0.0374    
+08 Jul 08:36    INFO MENTOR best validation updated.
+08 Jul 08:36    INFO epoch 13 training [time: 17.74s, train loss: 186.6474]
+08 Jul 08:36    INFO epoch 13 validation: recall@10: 0.0556    recall@20: 0.0871    ndcg@10: 0.0297    ndcg@20: 0.0377    
+08 Jul 08:36    INFO MENTOR best validation updated.
+08 Jul 08:36    INFO epoch 14 training [time: 17.76s, train loss: 186.0746]
+08 Jul 08:36    INFO epoch 14 validation: recall@10: 0.0571    recall@20: 0.0883    ndcg@10: 0.0305    ndcg@20: 0.0384    
+08 Jul 08:36    INFO MENTOR best validation updated.
+08 Jul 08:37    INFO epoch 15 training [time: 17.61s, train loss: 185.6093]
+08 Jul 08:37    INFO epoch 15 validation: recall@10: 0.0573    recall@20: 0.0905    ndcg@10: 0.0304    ndcg@20: 0.0388    
+08 Jul 08:37    INFO MENTOR best validation updated.
+08 Jul 08:37    INFO epoch 16 training [time: 17.56s, train loss: 185.2971]
+08 Jul 08:37    INFO epoch 16 validation: recall@10: 0.0570    recall@20: 0.0894    ndcg@10: 0.0306    ndcg@20: 0.0388    
+08 Jul 08:37    INFO epoch 17 training [time: 17.61s, train loss: 184.7985]
+08 Jul 08:37    INFO epoch 17 validation: recall@10: 0.0581    recall@20: 0.0896    ndcg@10: 0.0311    ndcg@20: 0.0391    
+08 Jul 08:38    INFO epoch 18 training [time: 17.98s, train loss: 184.4451]
+08 Jul 08:38    INFO epoch 18 validation: recall@10: 0.0578    recall@20: 0.0900    ndcg@10: 0.0308    ndcg@20: 0.0390    
+08 Jul 08:38    INFO epoch 19 training [time: 17.57s, train loss: 184.1448]
+08 Jul 08:38    INFO epoch 19 validation: recall@10: 0.0576    recall@20: 0.0907    ndcg@10: 0.0310    ndcg@20: 0.0394    
+08 Jul 08:38    INFO MENTOR best validation updated.
+08 Jul 08:38    INFO epoch 20 training [time: 17.93s, train loss: 183.8791]
+08 Jul 08:38    INFO epoch 20 validation: recall@10: 0.0582    recall@20: 0.0910    ndcg@10: 0.0312    ndcg@20: 0.0395    
+08 Jul 08:38    INFO MENTOR best validation updated.
+08 Jul 08:39    INFO epoch 21 training [time: 17.69s, train loss: 183.8243]
+08 Jul 08:39    INFO epoch 21 validation: recall@10: 0.0588    recall@20: 0.0916    ndcg@10: 0.0315    ndcg@20: 0.0398    
+08 Jul 08:39    INFO MENTOR best validation updated.
+08 Jul 08:39    INFO epoch 22 training [time: 17.66s, train loss: 183.4458]
+08 Jul 08:39    INFO epoch 22 validation: recall@10: 0.0587    recall@20: 0.0927    ndcg@10: 0.0313    ndcg@20: 0.0399    
+08 Jul 08:39    INFO MENTOR best validation updated.
+08 Jul 08:39    INFO epoch 23 training [time: 17.77s, train loss: 183.2538]
+08 Jul 08:39    INFO epoch 23 validation: recall@10: 0.0576    recall@20: 0.0924    ndcg@10: 0.0313    ndcg@20: 0.0401    
+08 Jul 08:40    INFO epoch 24 training [time: 17.65s, train loss: 183.0738]
+08 Jul 08:40    INFO epoch 24 validation: recall@10: 0.0590    recall@20: 0.0929    ndcg@10: 0.0317    ndcg@20: 0.0403    
+08 Jul 08:40    INFO MENTOR best validation updated.
+08 Jul 08:40    INFO epoch 25 training [time: 17.93s, train loss: 182.8087]
+08 Jul 08:40    INFO epoch 25 validation: recall@10: 0.0604    recall@20: 0.0930    ndcg@10: 0.0321    ndcg@20: 0.0403    
+08 Jul 08:40    INFO MENTOR best validation updated.
+08 Jul 08:40    INFO epoch 26 training [time: 17.60s, train loss: 182.5281]
+08 Jul 08:40    INFO epoch 26 validation: recall@10: 0.0600    recall@20: 0.0935    ndcg@10: 0.0322    ndcg@20: 0.0407    
+08 Jul 08:40    INFO MENTOR best validation updated.
+08 Jul 08:41    INFO epoch 27 training [time: 17.89s, train loss: 182.5269]
+08 Jul 08:41    INFO epoch 27 validation: recall@10: 0.0592    recall@20: 0.0936    ndcg@10: 0.0321    ndcg@20: 0.0408    
+08 Jul 08:41    INFO MENTOR best validation updated.
+08 Jul 08:41    INFO epoch 28 training [time: 17.70s, train loss: 182.4491]
+08 Jul 08:41    INFO epoch 28 validation: recall@10: 0.0595    recall@20: 0.0934    ndcg@10: 0.0322    ndcg@20: 0.0408    
+08 Jul 08:41    INFO epoch 29 training [time: 18.33s, train loss: 182.0711]
+08 Jul 08:41    INFO epoch 29 validation: recall@10: 0.0599    recall@20: 0.0945    ndcg@10: 0.0323    ndcg@20: 0.0411    
+08 Jul 08:41    INFO MENTOR best validation updated.
+08 Jul 08:42    INFO epoch 30 training [time: 17.70s, train loss: 181.9248]
+08 Jul 08:42    INFO epoch 30 validation: recall@10: 0.0616    recall@20: 0.0945    ndcg@10: 0.0329    ndcg@20: 0.0412    
+08 Jul 08:42    INFO epoch 31 training [time: 17.70s, train loss: 181.7970]
+08 Jul 08:42    INFO epoch 31 validation: recall@10: 0.0615    recall@20: 0.0942    ndcg@10: 0.0330    ndcg@20: 0.0413    
+08 Jul 08:42    INFO epoch 32 training [time: 17.68s, train loss: 181.6139]
+08 Jul 08:42    INFO epoch 32 validation: recall@10: 0.0619    recall@20: 0.0949    ndcg@10: 0.0334    ndcg@20: 0.0417    
+08 Jul 08:42    INFO MENTOR best validation updated.
+08 Jul 08:43    INFO epoch 33 training [time: 17.64s, train loss: 181.4733]
+08 Jul 08:43    INFO epoch 33 validation: recall@10: 0.0615    recall@20: 0.0957    ndcg@10: 0.0332    ndcg@20: 0.0419    
+08 Jul 08:43    INFO MENTOR best validation updated.
+08 Jul 08:43    INFO epoch 34 training [time: 17.65s, train loss: 181.5072]
+08 Jul 08:43    INFO epoch 34 validation: recall@10: 0.0611    recall@20: 0.0947    ndcg@10: 0.0334    ndcg@20: 0.0419    
+08 Jul 08:43    INFO epoch 35 training [time: 17.63s, train loss: 181.2092]
+08 Jul 08:43    INFO epoch 35 validation: recall@10: 0.0613    recall@20: 0.0952    ndcg@10: 0.0333    ndcg@20: 0.0419    
+08 Jul 08:44    INFO epoch 36 training [time: 17.76s, train loss: 181.3406]
+08 Jul 08:44    INFO epoch 36 validation: recall@10: 0.0621    recall@20: 0.0950    ndcg@10: 0.0336    ndcg@20: 0.0420    
+08 Jul 08:44    INFO epoch 37 training [time: 17.60s, train loss: 181.0647]
+08 Jul 08:44    INFO epoch 37 validation: recall@10: 0.0615    recall@20: 0.0962    ndcg@10: 0.0333    ndcg@20: 0.0421    
+08 Jul 08:44    INFO MENTOR best validation updated.
+08 Jul 08:44    INFO epoch 38 training [time: 17.91s, train loss: 180.9926]
+08 Jul 08:44    INFO epoch 38 validation: recall@10: 0.0618    recall@20: 0.0952    ndcg@10: 0.0336    ndcg@20: 0.0421    
+08 Jul 08:44    INFO epoch 39 training [time: 17.61s, train loss: 180.9079]
+08 Jul 08:45    INFO epoch 39 validation: recall@10: 0.0621    recall@20: 0.0959    ndcg@10: 0.0338    ndcg@20: 0.0424    
+08 Jul 08:45    INFO epoch 40 training [time: 17.75s, train loss: 180.7038]
+08 Jul 08:45    INFO epoch 40 validation: recall@10: 0.0618    recall@20: 0.0947    ndcg@10: 0.0337    ndcg@20: 0.0421    
+08 Jul 08:45    INFO epoch 41 training [time: 17.63s, train loss: 180.6992]
+08 Jul 08:45    INFO epoch 41 validation: recall@10: 0.0627    recall@20: 0.0961    ndcg@10: 0.0342    ndcg@20: 0.0426    
+08 Jul 08:45    INFO epoch 42 training [time: 17.62s, train loss: 180.5834]
+08 Jul 08:45    INFO epoch 42 validation: recall@10: 0.0626    recall@20: 0.0948    ndcg@10: 0.0338    ndcg@20: 0.0420    
+08 Jul 08:46    INFO epoch 43 training [time: 17.63s, train loss: 180.5332]
+08 Jul 08:46    INFO epoch 43 validation: recall@10: 0.0622    recall@20: 0.0958    ndcg@10: 0.0337    ndcg@20: 0.0422    
+08 Jul 08:46    INFO epoch 44 training [time: 17.58s, train loss: 180.4960]
+08 Jul 08:46    INFO epoch 44 validation: recall@10: 0.0625    recall@20: 0.0963    ndcg@10: 0.0338    ndcg@20: 0.0424    
+08 Jul 08:46    INFO MENTOR best validation updated.
+08 Jul 08:46    INFO epoch 45 training [time: 17.66s, train loss: 180.5016]
+08 Jul 08:46    INFO epoch 45 validation: recall@10: 0.0632    recall@20: 0.0966    ndcg@10: 0.0340    ndcg@20: 0.0425    
+08 Jul 08:46    INFO MENTOR best validation updated.
+08 Jul 08:47    INFO epoch 46 training [time: 17.90s, train loss: 180.3821]
+08 Jul 08:47    INFO epoch 46 validation: recall@10: 0.0631    recall@20: 0.0971    ndcg@10: 0.0340    ndcg@20: 0.0426    
+08 Jul 08:47    INFO MENTOR best validation updated.
+08 Jul 08:47    INFO epoch 47 training [time: 17.66s, train loss: 180.2294]
+08 Jul 08:47    INFO epoch 47 validation: recall@10: 0.0634    recall@20: 0.0967    ndcg@10: 0.0342    ndcg@20: 0.0427    
+08 Jul 08:47    INFO epoch 48 training [time: 17.59s, train loss: 180.2196]
+08 Jul 08:47    INFO epoch 48 validation: recall@10: 0.0627    recall@20: 0.0969    ndcg@10: 0.0338    ndcg@20: 0.0425    
+08 Jul 08:48    INFO epoch 49 training [time: 17.90s, train loss: 180.2330]
+08 Jul 08:48    INFO epoch 49 validation: recall@10: 0.0630    recall@20: 0.0971    ndcg@10: 0.0341    ndcg@20: 0.0428    
+08 Jul 08:48    INFO epoch 50 training [time: 17.57s, train loss: 180.1837]
+08 Jul 08:48    INFO epoch 50 validation: recall@10: 0.0636    recall@20: 0.0975    ndcg@10: 0.0342    ndcg@20: 0.0428    
+08 Jul 08:48    INFO MENTOR best validation updated.
+08 Jul 08:48    INFO epoch 51 training [time: 17.96s, train loss: 180.1409]
+08 Jul 08:48    INFO epoch 51 validation: recall@10: 0.0630    recall@20: 0.0979    ndcg@10: 0.0343    ndcg@20: 0.0431    
+08 Jul 08:48    INFO MENTOR best validation updated.
+08 Jul 08:49    INFO epoch 52 training [time: 17.71s, train loss: 180.1104]
+08 Jul 08:49    INFO epoch 52 validation: recall@10: 0.0636    recall@20: 0.0973    ndcg@10: 0.0343    ndcg@20: 0.0429    
+08 Jul 08:49    INFO epoch 53 training [time: 17.59s, train loss: 179.9496]
+08 Jul 08:49    INFO epoch 53 validation: recall@10: 0.0642    recall@20: 0.0975    ndcg@10: 0.0344    ndcg@20: 0.0428    
+08 Jul 08:49    INFO epoch 54 training [time: 17.57s, train loss: 179.9546]
+08 Jul 08:49    INFO epoch 54 validation: recall@10: 0.0639    recall@20: 0.0974    ndcg@10: 0.0343    ndcg@20: 0.0427    
+08 Jul 08:50    INFO epoch 55 training [time: 17.62s, train loss: 179.9798]
+08 Jul 08:50    INFO epoch 55 validation: recall@10: 0.0625    recall@20: 0.0963    ndcg@10: 0.0340    ndcg@20: 0.0426    
+08 Jul 08:50    INFO epoch 56 training [time: 17.61s, train loss: 179.8713]
+08 Jul 08:50    INFO epoch 56 validation: recall@10: 0.0635    recall@20: 0.0969    ndcg@10: 0.0341    ndcg@20: 0.0426    
+08 Jul 08:50    INFO epoch 57 training [time: 17.58s, train loss: 179.8156]
+08 Jul 08:50    INFO epoch 57 validation: recall@10: 0.0630    recall@20: 0.0976    ndcg@10: 0.0339    ndcg@20: 0.0427    
+08 Jul 08:51    INFO epoch 58 training [time: 17.60s, train loss: 179.7152]
+08 Jul 08:51    INFO epoch 58 validation: recall@10: 0.0629    recall@20: 0.0960    ndcg@10: 0.0342    ndcg@20: 0.0426    
+08 Jul 08:51    INFO epoch 59 training [time: 17.61s, train loss: 179.6366]
+08 Jul 08:51    INFO epoch 59 validation: recall@10: 0.0633    recall@20: 0.0967    ndcg@10: 0.0341    ndcg@20: 0.0426    
+08 Jul 08:51    INFO epoch 60 training [time: 17.62s, train loss: 179.6346]
+08 Jul 08:51    INFO epoch 60 validation: recall@10: 0.0636    recall@20: 0.0974    ndcg@10: 0.0340    ndcg@20: 0.0426    
+08 Jul 08:52    INFO epoch 61 training [time: 17.66s, train loss: 179.5717]
+08 Jul 08:52    INFO epoch 61 validation: recall@10: 0.0635    recall@20: 0.0986    ndcg@10: 0.0340    ndcg@20: 0.0429    
+08 Jul 08:52    INFO MENTOR best validation updated.
+08 Jul 08:52    INFO epoch 62 training [time: 17.94s, train loss: 179.3685]
+08 Jul 08:52    INFO epoch 62 validation: recall@10: 0.0637    recall@20: 0.0974    ndcg@10: 0.0340    ndcg@20: 0.0425    
+08 Jul 08:52    INFO epoch 63 training [time: 17.63s, train loss: 179.4564]
+08 Jul 08:52    INFO epoch 63 validation: recall@10: 0.0631    recall@20: 0.0966    ndcg@10: 0.0340    ndcg@20: 0.0425    
+08 Jul 08:53    INFO epoch 64 training [time: 17.83s, train loss: 179.3882]
+08 Jul 08:53    INFO epoch 64 validation: recall@10: 0.0638    recall@20: 0.0967    ndcg@10: 0.0342    ndcg@20: 0.0426    
+08 Jul 08:53    INFO epoch 65 training [time: 17.67s, train loss: 179.4238]
+08 Jul 08:53    INFO epoch 65 validation: recall@10: 0.0634    recall@20: 0.0962    ndcg@10: 0.0341    ndcg@20: 0.0425    
+08 Jul 08:53    INFO epoch 66 training [time: 17.66s, train loss: 179.3346]
+08 Jul 08:53    INFO epoch 66 validation: recall@10: 0.0631    recall@20: 0.0971    ndcg@10: 0.0342    ndcg@20: 0.0429    
+08 Jul 08:53    INFO epoch 67 training [time: 17.62s, train loss: 179.1879]
+08 Jul 08:54    INFO epoch 67 validation: recall@10: 0.0644    recall@20: 0.0969    ndcg@10: 0.0343    ndcg@20: 0.0426    
+08 Jul 08:54    INFO epoch 68 training [time: 17.61s, train loss: 179.1692]
+08 Jul 08:54    INFO epoch 68 validation: recall@10: 0.0633    recall@20: 0.0966    ndcg@10: 0.0341    ndcg@20: 0.0426    
+08 Jul 08:54    INFO epoch 69 training [time: 17.70s, train loss: 179.1712]
+08 Jul 08:54    INFO epoch 69 validation: recall@10: 0.0642    recall@20: 0.0968    ndcg@10: 0.0345    ndcg@20: 0.0427    
+08 Jul 08:54    INFO epoch 70 training [time: 17.61s, train loss: 179.2675]
+08 Jul 08:54    INFO epoch 70 validation: recall@10: 0.0642    recall@20: 0.0976    ndcg@10: 0.0344    ndcg@20: 0.0429    
+08 Jul 08:55    INFO epoch 71 training [time: 17.92s, train loss: 179.1306]
+08 Jul 08:55    INFO epoch 71 validation: recall@10: 0.0641    recall@20: 0.0971    ndcg@10: 0.0343    ndcg@20: 0.0427    
+08 Jul 08:55    INFO epoch 72 training [time: 17.57s, train loss: 179.2347]
+08 Jul 08:55    INFO epoch 72 validation: recall@10: 0.0640    recall@20: 0.0967    ndcg@10: 0.0346    ndcg@20: 0.0429    
+08 Jul 08:55    INFO epoch 73 training [time: 17.59s, train loss: 179.1127]
+08 Jul 08:55    INFO epoch 73 validation: recall@10: 0.0636    recall@20: 0.0981    ndcg@10: 0.0343    ndcg@20: 0.0431    
+08 Jul 08:56    INFO epoch 74 training [time: 17.67s, train loss: 179.0211]
+08 Jul 08:56    INFO epoch 74 validation: recall@10: 0.0644    recall@20: 0.0977    ndcg@10: 0.0345    ndcg@20: 0.0430    
+08 Jul 08:56    INFO epoch 75 training [time: 17.82s, train loss: 178.9775]
+08 Jul 08:56    INFO epoch 75 validation: recall@10: 0.0642    recall@20: 0.0973    ndcg@10: 0.0343    ndcg@20: 0.0427    
+08 Jul 08:56    INFO epoch 76 training [time: 17.71s, train loss: 179.0364]
+08 Jul 08:56    INFO epoch 76 validation: recall@10: 0.0645    recall@20: 0.0966    ndcg@10: 0.0341    ndcg@20: 0.0423    
+08 Jul 08:57    INFO epoch 77 training [time: 17.99s, train loss: 178.9623]
+08 Jul 08:57    INFO epoch 77 validation: recall@10: 0.0639    recall@20: 0.0970    ndcg@10: 0.0339    ndcg@20: 0.0424    
+08 Jul 08:57    INFO epoch 78 training [time: 17.63s, train loss: 178.9846]
+08 Jul 08:57    INFO epoch 78 validation: recall@10: 0.0631    recall@20: 0.0972    ndcg@10: 0.0338    ndcg@20: 0.0425    
+08 Jul 08:57    INFO epoch 79 training [time: 17.64s, train loss: 178.7983]
+08 Jul 08:57    INFO epoch 79 validation: recall@10: 0.0627    recall@20: 0.0970    ndcg@10: 0.0336    ndcg@20: 0.0423    
+08 Jul 08:58    INFO epoch 80 training [time: 17.70s, train loss: 178.8477]
+08 Jul 08:58    INFO epoch 80 validation: recall@10: 0.0629    recall@20: 0.0981    ndcg@10: 0.0336    ndcg@20: 0.0425    
+08 Jul 08:58    INFO epoch 81 training [time: 17.69s, train loss: 178.8794]
+08 Jul 08:58    INFO epoch 81 validation: recall@10: 0.0634    recall@20: 0.0967    ndcg@10: 0.0337    ndcg@20: 0.0422    
+08 Jul 08:58    INFO epoch 82 training [time: 17.59s, train loss: 178.7693]
+08 Jul 08:58    INFO epoch 82 validation: recall@10: 0.0636    recall@20: 0.0968    ndcg@10: 0.0339    ndcg@20: 0.0424    
+08 Jul 08:58    INFO Early stopping at epoch 82.
+08 Jul 08:58    INFO Best trained-model validation score: 0.0986, result: recall@10: 0.0635    recall@20: 0.0986    ndcg@10: 0.0340    ndcg@20: 0.0429    
+08 Jul 08:59    INFO MMGF()
+Trainable parameters: 1
+08 Jul 08:59    INFO blend weight 0.00 validation: Recall@10: 0.0675    Recall@20: 0.0984    NDCG@10: 0.0371    NDCG@20: 0.0450    
+08 Jul 08:59    INFO blend weight 0.05 validation: Recall@10: 0.0678    Recall@20: 0.0995    NDCG@10: 0.0375    NDCG@20: 0.0456    
+08 Jul 08:59    INFO blend weight 0.10 validation: Recall@10: 0.0689    Recall@20: 0.1008    NDCG@10: 0.0380    NDCG@20: 0.0462    
+08 Jul 08:59    INFO blend weight 0.15 validation: Recall@10: 0.0695    Recall@20: 0.1016    NDCG@10: 0.0383    NDCG@20: 0.0465    
+08 Jul 08:59    INFO blend weight 0.20 validation: Recall@10: 0.0700    Recall@20: 0.1022    NDCG@10: 0.0386    NDCG@20: 0.0468    
+08 Jul 08:59    INFO blend weight 0.25 validation: Recall@10: 0.0708    Recall@20: 0.1038    NDCG@10: 0.0389    NDCG@20: 0.0473    
+08 Jul 08:59    INFO blend weight 0.30 validation: Recall@10: 0.0713    Recall@20: 0.1052    NDCG@10: 0.0391    NDCG@20: 0.0477    
+08 Jul 08:59    INFO blend weight 0.35 validation: Recall@10: 0.0713    Recall@20: 0.1060    NDCG@10: 0.0392    NDCG@20: 0.0480    
+08 Jul 08:59    INFO blend weight 0.40 validation: Recall@10: 0.0725    Recall@20: 0.1079    NDCG@10: 0.0395    NDCG@20: 0.0484    
+08 Jul 08:59    INFO blend weight 0.45 validation: Recall@10: 0.0727    Recall@20: 0.1089    NDCG@10: 0.0395    NDCG@20: 0.0487    
+08 Jul 09:00    INFO blend weight 0.50 validation: Recall@10: 0.0727    Recall@20: 0.1094    NDCG@10: 0.0397    NDCG@20: 0.0490    
+08 Jul 09:00    INFO blend weight 0.55 validation: Recall@10: 0.0727    Recall@20: 0.1087    NDCG@10: 0.0397    NDCG@20: 0.0489    
+08 Jul 09:00    INFO blend weight 0.60 validation: Recall@10: 0.0726    Recall@20: 0.1089    NDCG@10: 0.0398    NDCG@20: 0.0490    
+08 Jul 09:00    INFO blend weight 0.65 validation: Recall@10: 0.0742    Recall@20: 0.1090    NDCG@10: 0.0401    NDCG@20: 0.0489    
+08 Jul 09:00    INFO blend weight 0.70 validation: Recall@10: 0.0737    Recall@20: 0.1088    NDCG@10: 0.0400    NDCG@20: 0.0488    
+08 Jul 09:00    INFO blend weight 0.75 validation: Recall@10: 0.0724    Recall@20: 0.1083    NDCG@10: 0.0393    NDCG@20: 0.0484    
+08 Jul 09:00    INFO blend weight 0.80 validation: Recall@10: 0.0711    Recall@20: 0.1063    NDCG@10: 0.0386    NDCG@20: 0.0476    
+08 Jul 09:00    INFO blend weight 0.85 validation: Recall@10: 0.0692    Recall@20: 0.1063    NDCG@10: 0.0376    NDCG@20: 0.0471    
+08 Jul 09:00    INFO blend weight 0.90 validation: Recall@10: 0.0673    Recall@20: 0.1032    NDCG@10: 0.0366    NDCG@20: 0.0457    
+08 Jul 09:00    INFO blend weight 0.95 validation: Recall@10: 0.0659    Recall@20: 0.1012    NDCG@10: 0.0356    NDCG@20: 0.0445    
+08 Jul 09:00    INFO blend weight 1.00 validation: Recall@10: 0.0635    Recall@20: 0.0986    NDCG@10: 0.0340    NDCG@20: 0.0429    
+08 Jul 09:00    INFO Best blend weight: 0.50, validation score: 0.1094, result: Recall@10: 0.0727    Recall@20: 0.1094    NDCG@10: 0.0397    NDCG@20: 0.0490    
+08 Jul 09:00    INFO Hybrid test results by bucket:
+08 Jul 09:00    INFO overall: Recall@10: 0.0737    Recall@20: 0.1095    NDCG@10: 0.0406    NDCG@20: 0.0498    
+08 Jul 09:00    INFO user<=5: Recall@10: 0.0783    Recall@20: 0.1113    NDCG@10: 0.0426    NDCG@20: 0.0509    
+08 Jul 09:00    INFO user6-20: Recall@10: 0.0668    Recall@20: 0.1075    NDCG@10: 0.0371    NDCG@20: 0.0477    
+08 Jul 09:00    INFO user>20: Recall@10: 0.0499    Recall@20: 0.0865    NDCG@10: 0.0382    NDCG@20: 0.0523    
+08 Jul 09:00    INFO item<=5: Recall@10: 0.0109    Recall@20: 0.0163    NDCG@10: 0.0066    NDCG@20: 0.0080    
+08 Jul 09:00    INFO item6-20: Recall@10: 0.0185    Recall@20: 0.0298    NDCG@10: 0.0092    NDCG@20: 0.0120    
+08 Jul 09:00    INFO item>20: Recall@10: 0.1115    Recall@20: 0.1645    NDCG@10: 0.0612    NDCG@20: 0.0748    

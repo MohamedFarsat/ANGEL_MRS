@@ -1,0 +1,6 @@
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+Farsat/.codex_colab_ssh/
+Farsat/MMRec/data/baby/image_feat.npy
