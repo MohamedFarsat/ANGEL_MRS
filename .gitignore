@@ -2,5 +2,5 @@
 **/__pycache__/
 **/.pytest_cache/
 **/*.pyc
-Farsat/.codex_colab_ssh/
-Farsat/MMRec/data/baby/image_feat.npy
+Hybrid MMGF + MENTOR (Farsat)/.codex_colab_ssh/
+Hybrid MMGF + MENTOR (Farsat)/MMRec/data/baby/image_feat.npy
