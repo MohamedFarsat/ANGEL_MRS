@@ -8,10 +8,27 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import remove_self_loops, degree
 
 from common.abstract_recommender import GeneralRecommender
+
+
+class ResidualFeatureAdapter(nn.Module):
+    def __init__(self, input_dim, bottleneck_dim, dropout, alpha):
+        super().__init__()
+        self.norm = nn.LayerNorm(input_dim, elementwise_affine=False)
+        self.down = nn.Linear(input_dim, bottleneck_dim)
+        self.up = nn.Linear(bottleneck_dim, input_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.alpha = alpha
+        nn.init.zeros_(self.up.weight)
+        nn.init.zeros_(self.up.bias)
+
+    def forward(self, features):
+        residual = self.up(self.dropout(F.gelu(self.down(self.norm(features)))))
+        return features + self.alpha * residual
 
 
 class MENTOR(GeneralRecommender):
@@ -36,6 +53,13 @@ class MENTOR(GeneralRecommender):
         self.mask_weight_g = config['mask_weight_g']
         self.mask_weight_f = config['mask_weight_f']
         self.temp = config['temp']
+        self.use_id_residual = bool(config['use_id_residual'])
+        self.use_feature_adapter = bool(config['use_feature_adapter'])
+        self.mm_adj_refresh_interval = int(config['mm_adj_refresh_interval'] or 0)
+        self._pre_epoch_calls = 0
+        self.loss_type = (config['loss_type'] or 'bpr').lower()
+        self.num_negatives = int(config['num_negatives'] or 1)
+        self.ssm_temp = float(config['ssm_temp'] or 1.0)
         self.drop_rate = 0.1
         self.v_rep = None
         self.t_rep = None
@@ -47,10 +71,12 @@ class MENTOR(GeneralRecommender):
         self.mlp = nn.Linear(2 * dim_x, 2 * dim_x)
 
         dataset_path = os.path.abspath(config['data_path'] + config['dataset'])
-        self.user_graph_dict = np.load(
-            os.path.join(dataset_path, config['user_graph_dict_file']),
-            allow_pickle=True
-        ).item()
+        user_graph_path = os.path.join(dataset_path, config['user_graph_dict_file'])
+        self.user_graph_dict = (
+            np.load(user_graph_path, allow_pickle=True).item()
+            if os.path.exists(user_graph_path)
+            else None
+        )
 
         mm_adj_file = os.path.join(dataset_path, 'mm_adj_{}.pt'.format(self.knn_k))
         if self.v_feat is not None:
@@ -59,6 +85,27 @@ class MENTOR(GeneralRecommender):
         if self.t_feat is not None:
             self.text_embedding = nn.Embedding.from_pretrained(self.t_feat, freeze=False)
             self.text_trs = nn.Linear(self.t_feat.shape[1], self.feat_embed_dim)
+
+        self.visual_adapter = (
+            ResidualFeatureAdapter(
+                self.v_feat.shape[1],
+                config['feature_adapter_dim'] or 64,
+                config['feature_adapter_dropout'] or 0.1,
+                config['feature_adapter_alpha'] or 0.1,
+            )
+            if self.use_feature_adapter and self.v_feat is not None
+            else None
+        )
+        self.text_adapter = (
+            ResidualFeatureAdapter(
+                self.t_feat.shape[1],
+                config['feature_adapter_dim'] or 64,
+                config['feature_adapter_dropout'] or 0.1,
+                config['feature_adapter_alpha'] or 0.1,
+            )
+            if self.use_feature_adapter and self.t_feat is not None
+            else None
+        )
 
         if os.path.exists(mm_adj_file):
             self.mm_adj = torch.load(mm_adj_file, map_location=self.device)
@@ -123,6 +170,7 @@ class MENTOR(GeneralRecommender):
             gain=1).to(self.device))
         self.id_gcn = GCN(dataset, self.batch_size, self.num_user, self.num_item, dim_x, self.aggr_mode,
                           dim_latent=64, device=self.device, features=self.id_feat)
+        self.id_residual_weight = nn.Parameter(torch.zeros(1))
 
         init_embed = nn.init.xavier_normal_(
             torch.tensor(np.random.randn(self.num_user + self.num_item, dim_x), dtype=torch.float32)
@@ -158,8 +206,27 @@ class MENTOR(GeneralRecommender):
         return torch.sparse.FloatTensor(indices, values, adj_size).to(self.device)
 
     def pre_epoch_processing(self):
-        self.epoch_user_graph, self.user_weight_matrix = self.topk_sample(self.k)
-        self.user_weight_matrix = self.user_weight_matrix.to(self.device)
+        if self.user_graph_dict is not None:
+            self.epoch_user_graph, self.user_weight_matrix = self.topk_sample(self.k)
+            self.user_weight_matrix = self.user_weight_matrix.to(self.device)
+        self._pre_epoch_calls += 1
+        if (self.mm_adj_refresh_interval > 0 and self.use_feature_adapter
+                and self._pre_epoch_calls % self.mm_adj_refresh_interval == 0):
+            self._refresh_mm_adj()
+
+    def _refresh_mm_adj(self):
+        with torch.no_grad():
+            image_adj, text_adj = None, None
+            if self.v_feat is not None:
+                _, image_adj = self.get_knn_adj_mat(self.adapted_visual_features())
+            if self.t_feat is not None:
+                _, text_adj = self.get_knn_adj_mat(self.adapted_text_features())
+            if image_adj is not None and text_adj is not None:
+                self.mm_adj = self.mm_image_weight * image_adj + (1.0 - self.mm_image_weight) * text_adj
+            elif image_adj is not None:
+                self.mm_adj = image_adj
+            else:
+                self.mm_adj = text_adj
 
     def pack_edge_index(self, inter_mat):
         rows = inter_mat.row
@@ -169,21 +236,43 @@ class MENTOR(GeneralRecommender):
     def InfoNCE(self, view1, view2, temp):
         view1, view2 = F.normalize(view1, dim=1), F.normalize(view2, dim=1)
         pos_score = torch.exp((view1 * view2).sum(dim=-1) / temp)
-        ttl_score = torch.exp(torch.matmul(view1, view2.transpose(0, 1)) / temp).sum(dim=1)
+        ttl_score = self._infonce_denominator(view1, view2, temp)
         return torch.mean(-torch.log(pos_score / ttl_score.clamp_min(1e-12)))
+
+    def _infonce_denominator(self, view1, view2, temp, chunk=4096):
+        def block_sum(v1_chunk):
+            sim = torch.matmul(v1_chunk, view2.transpose(0, 1))
+            return torch.exp(sim / temp).sum(dim=1)
+
+        outs = []
+        for start in range(0, view1.shape[0], chunk):
+            v1_chunk = view1[start:start + chunk]
+            if self.training and v1_chunk.requires_grad:
+                outs.append(checkpoint(block_sum, v1_chunk, use_reentrant=False))
+            else:
+                outs.append(block_sum(v1_chunk))
+        return torch.cat(outs, dim=0)
+
+    def adapted_visual_features(self):
+        return self.v_feat if self.visual_adapter is None else self.visual_adapter(self.v_feat)
+
+    def adapted_text_features(self):
+        return self.t_feat if self.text_adapter is None else self.text_adapter(self.t_feat)
 
     def forward(self, interaction):
         user_nodes = interaction[0]
         pos_item_nodes = interaction[1] + self.n_users
         neg_item_nodes = interaction[2] + self.n_users
+        v_feat = self.adapted_visual_features()
+        t_feat = self.adapted_text_features()
 
-        self.v_rep, self.v_preference = self.v_gcn(self.edge_index_dropv, self.edge_index, self.v_feat)
-        self.t_rep, self.t_preference = self.t_gcn(self.edge_index_dropt, self.edge_index, self.t_feat)
+        self.v_rep, self.v_preference = self.v_gcn(self.edge_index_dropv, self.edge_index, v_feat)
+        self.t_rep, self.t_preference = self.t_gcn(self.edge_index_dropt, self.edge_index, t_feat)
         self.id_rep, self.id_preference = self.id_gcn(self.edge_index_dropt, self.edge_index, self.id_feat)
-        self.v_rep_n1, _ = self.v_gcn_n1(self.edge_index_dropv, self.edge_index, self.v_feat, perturbed=True)
-        self.t_rep_n1, _ = self.t_gcn_n1(self.edge_index_dropt, self.edge_index, self.t_feat, perturbed=True)
-        self.v_rep_n2, _ = self.v_gcn_n2(self.edge_index_dropv, self.edge_index, self.v_feat, perturbed=True)
-        self.t_rep_n2, _ = self.t_gcn_n2(self.edge_index_dropt, self.edge_index, self.t_feat, perturbed=True)
+        self.v_rep_n1, _ = self.v_gcn_n1(self.edge_index_dropv, self.edge_index, v_feat, perturbed=True)
+        self.t_rep_n1, _ = self.t_gcn_n1(self.edge_index_dropt, self.edge_index, t_feat, perturbed=True)
+        self.v_rep_n2, _ = self.v_gcn_n2(self.edge_index_dropv, self.edge_index, v_feat, perturbed=True)
+        self.t_rep_n2, _ = self.t_gcn_n2(self.edge_index_dropt, self.edge_index, t_feat, perturbed=True)
 
         representation = torch.cat((self.v_rep, self.t_rep), dim=1)
         guide_representation = torch.cat((self.id_rep, self.id_rep), dim=1)
@@ -214,15 +303,39 @@ class MENTOR(GeneralRecommender):
         self.result_embed_n1 = torch.cat((user_rep_n1, item_rep_n1), dim=0)
         self.result_embed_n2 = torch.cat((user_rep_n2, item_rep_n2), dim=0)
 
-        user_tensor = self.result_embed[user_nodes]
-        pos_item_tensor = self.result_embed[pos_item_nodes]
-        neg_item_tensor = self.result_embed[neg_item_nodes]
-        return torch.sum(user_tensor * pos_item_tensor, dim=1), torch.sum(user_tensor * neg_item_tensor, dim=1)
+        pos_scores = self.score_user_item_pairs(user_nodes, pos_item_nodes - self.n_users)
+        neg_scores = self.score_user_item_pairs(user_nodes, neg_item_nodes - self.n_users)
+        return pos_scores, neg_scores
 
     def _weighted_user_rep(self, v_rep, t_rep):
         user_rep = torch.stack((v_rep[:self.num_user], t_rep[:self.num_user]), dim=2)
         user_rep = self.weight_u.transpose(1, 2) * user_rep
         return torch.cat((user_rep[:, :, 0], user_rep[:, :, 1]), dim=1)
+
+    def id_residual_scale(self):
+        if not self.use_id_residual:
+            return 0.0
+        return 0.1 * torch.tanh(self.id_residual_weight)
+
+    def score_user_item_pairs(self, user_ids, item_ids):
+        user_tensor = self.result_embed[user_ids]
+        item_tensor = self.result_embed[self.n_users + item_ids]
+        scores = torch.sum(user_tensor * item_tensor, dim=-1)
+
+        guide_user_tensor = self.result_embed_guide[user_ids]
+        guide_item_tensor = self.result_embed_guide[self.n_users + item_ids]
+        guide_scores = torch.sum(guide_user_tensor * guide_item_tensor, dim=-1)
+        return scores + self.id_residual_scale() * guide_scores
+
+    def score_user_items_multi(self, user_ids, item_ids_matrix):
+        user_tensor = self.result_embed[user_ids]
+        item_tensor = self.result_embed[self.n_users + item_ids_matrix]
+        scores = (user_tensor.unsqueeze(0) * item_tensor).sum(dim=-1)
+
+        guide_user = self.result_embed_guide[user_ids]
+        guide_item = self.result_embed_guide[self.n_users + item_ids_matrix]
+        guide_scores = (guide_user.unsqueeze(0) * guide_item).sum(dim=-1)
+        return scores + self.id_residual_scale() * guide_scores
 
     def buildItemGraph(self, h):
         for _ in range(self.n_layers):
@@ -240,7 +353,13 @@ class MENTOR(GeneralRecommender):
     def calculate_loss(self, interaction):
         user = interaction[0]
         pos_scores, neg_scores = self.forward(interaction)
-        loss_value = -torch.mean(torch.log2(torch.sigmoid(pos_scores - neg_scores).clamp_min(1e-12)))
+        if self.loss_type == 'softmax':
+            neg_ids_matrix = interaction[2:2 + self.num_negatives]
+            all_neg_scores = self.score_user_items_multi(user, neg_ids_matrix)
+            logits = torch.cat((pos_scores.unsqueeze(0), all_neg_scores), dim=0)
+            loss_value = -torch.mean(F.log_softmax(logits / self.ssm_temp, dim=0)[0])
+        else:
+            loss_value = -torch.mean(torch.log2(torch.sigmoid(pos_scores - neg_scores).clamp_min(1e-12)))
 
         reg_embedding_loss_v = (self.v_preference[user] ** 2).mean() if self.v_preference is not None else 0.0
         reg_embedding_loss_t = (self.t_preference[user] ** 2).mean() if self.t_preference is not None else 0.0
@@ -274,11 +393,19 @@ class MENTOR(GeneralRecommender):
         return loss_value + reg_loss + align_loss + mask_f_loss + mask_g_loss
 
     def full_sort_predict(self, interaction):
+        user_ids = interaction[0]
         user_tensor = self.result_embed[:self.n_users]
         item_tensor = self.result_embed[self.n_users:]
-        return torch.matmul(user_tensor[interaction[0], :], item_tensor.t())
+        score_matrix = torch.matmul(user_tensor[user_ids, :], item_tensor.t())
+
+        guide_user_tensor = self.result_embed_guide[:self.n_users]
+        guide_item_tensor = self.result_embed_guide[self.n_users:]
+        guide_score_matrix = torch.matmul(guide_user_tensor[user_ids, :], guide_item_tensor.t())
+        return score_matrix + self.id_residual_scale() * guide_score_matrix
 
     def topk_sample(self, k):
+        if self.user_graph_dict is None:
+            return [], torch.empty(0, k)
         user_graph_index = []
         user_weight_matrix = torch.zeros(len(self.user_graph_dict), k)
         fallback = [0] * k

@@ -103,10 +103,19 @@ class Trainer(AbstractTrainer):
 
         self.item_tensor = None
         self.tot_item_num = None
+        self.checkpoint_dir = config['checkpoint_dir'] or 'saved'
+        self.checkpoint_interval = config['checkpoint_interval']
+        self.checkpoint_run_id = config['checkpoint_run_id']
+        if self.checkpoint_run_id is None:
+            self.checkpoint_run_id = '{}-{}-{}'.format(config['model'], config['dataset'], get_local_time())
+        self.checkpoint_prefix = os.path.join(self.checkpoint_dir, self.checkpoint_run_id)
+        self.resume_checkpoint = config['resume_checkpoint']
         self.mg = mg
         self.alpha1 = config['alpha1']
         self.alpha2 = config['alpha2']
         self.beta = config['beta']
+        if self.resume_checkpoint:
+            self._load_checkpoint(self.resume_checkpoint)
 
     def _build_optimizer(self):
         r"""Init the Optimizer
@@ -144,6 +153,8 @@ class Trainer(AbstractTrainer):
         if not self.req_training:
             return 0.0, []
         self.model.train()
+        if hasattr(train_data, 'set_epoch'):
+            train_data.set_epoch(epoch_idx)
         loss_func = loss_func or self.model.calculate_loss
         total_loss = None
         loss_batches = []
@@ -220,6 +231,48 @@ class Trainer(AbstractTrainer):
             train_loss_output += 'train loss: %.4f' % losses
         return train_loss_output + ']'
 
+    def _checkpoint_state(self, epoch_idx):
+        config_dict = getattr(self.config, 'final_config_dict', None)
+        return {
+            'epoch': epoch_idx,
+            'next_epoch': epoch_idx + 1,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'lr_scheduler_state_dict': self.lr_scheduler.state_dict(),
+            'best_valid_score': self.best_valid_score,
+            'best_valid_result': self.best_valid_result,
+            'best_test_upon_valid': self.best_test_upon_valid,
+            'cur_step': self.cur_step,
+            'train_loss_dict': self.train_loss_dict,
+            'config': config_dict,
+        }
+
+    def _save_checkpoint(self, epoch_idx, name):
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+        checkpoint_path = '{}-{}.pth'.format(self.checkpoint_prefix, name)
+        torch.save(self._checkpoint_state(epoch_idx), checkpoint_path)
+        self.logger.info('Saved checkpoint: {}'.format(checkpoint_path))
+
+    def _load_checkpoint(self, checkpoint_path):
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        except TypeError:
+            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        incompatible_keys = self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        if incompatible_keys.missing_keys:
+            self.logger.info('Checkpoint missing keys: {}'.format(incompatible_keys.missing_keys))
+        if incompatible_keys.unexpected_keys:
+            self.logger.info('Checkpoint ignored unexpected keys: {}'.format(incompatible_keys.unexpected_keys))
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
+        self.start_epoch = checkpoint.get('next_epoch', checkpoint.get('epoch', -1) + 1)
+        self.best_valid_score = checkpoint.get('best_valid_score', self.best_valid_score)
+        self.best_valid_result = checkpoint.get('best_valid_result', self.best_valid_result)
+        self.best_test_upon_valid = checkpoint.get('best_test_upon_valid', self.best_test_upon_valid)
+        self.cur_step = checkpoint.get('cur_step', self.cur_step)
+        self.train_loss_dict = checkpoint.get('train_loss_dict', self.train_loss_dict)
+        self.logger.info('Loaded checkpoint: {}. Resuming from epoch {}.'.format(checkpoint_path, self.start_epoch))
+
     def fit(self, train_data, valid_data=None, test_data=None, saved=False, verbose=True):
         r"""Train the model based on the train data and the valid data.
 
@@ -279,6 +332,11 @@ class Trainer(AbstractTrainer):
                         self.logger.info(update_output)
                     self.best_valid_result = valid_result
                     self.best_test_upon_valid = test_result
+                    if saved and self.checkpoint_interval:
+                        self._save_checkpoint(epoch_idx, 'best')
+
+                if saved and self.checkpoint_interval and (epoch_idx + 1) % self.checkpoint_interval == 0:
+                    self._save_checkpoint(epoch_idx, 'latest')
 
                 if stop_flag:
                     stop_output = '+++++Finished training, best eval result in epoch %d' % \

@@ -4,7 +4,24 @@ feat_embed_dim: 64
 n_mm_layers: 1
 n_layers: 2
 knn_k: 10
+knn_block_size: 1024
 mm_image_weight: 0.1
+
+# Cui Tao sampled-softmax extension. Defaults reproduce original MENTOR.
+num_negatives: 1
+loss_type: 'bpr'
+ssm_temp: 1.0
+hard_neg_ratio: 0.0
+hard_neg_warmup_epochs: 3
+hard_neg_ramp_epochs: 5
+
+# Optional ablations, disabled by default.
+use_feature_adapter: False
+feature_adapter_dim: 64
+feature_adapter_dropout: 0.1
+feature_adapter_alpha: 0.1
+mm_adj_refresh_interval: 0
+use_id_residual: False
 
 learning_rate: [0.0001]
 reg_weight: [0.001]

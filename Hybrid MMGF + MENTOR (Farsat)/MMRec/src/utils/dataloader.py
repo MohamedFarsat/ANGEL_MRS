@@ -5,6 +5,7 @@ Wrap dataset into dataloader
 ################################################
 """
 import math
+import os
 import torch
 import random
 import numpy as np
@@ -118,6 +119,17 @@ class TrainDataLoader(AbstractDataLoader):
         self.all_items_set = set(self.all_items)
         self.all_users_set = set(self.all_uids)
         self.all_item_len = len(self.all_items)
+        self.current_epoch = 0
+        self.hard_neg_ratio = config['hard_neg_ratio'] if config['hard_neg_ratio'] is not None else 0.0
+        self.hard_neg_warmup_epochs = (
+            config['hard_neg_warmup_epochs'] if config['hard_neg_warmup_epochs'] is not None else 3
+        )
+        self.hard_neg_ramp_epochs = (
+            config['hard_neg_ramp_epochs'] if config['hard_neg_ramp_epochs'] is not None else 5
+        )
+        self.item_hard_neighbors = None
+        self._hard_neg_announced = False
+        self.num_negatives = int(config['num_negatives'] or 1)
         # if full sampling
         self.use_full_sampling = config['use_full_sampling']
 
@@ -151,6 +163,24 @@ class TrainDataLoader(AbstractDataLoader):
         random.shuffle(self.all_items)
         # reorder dataset as default (chronological order)
         #self.dataset.sort_by_chronological()
+
+    def set_epoch(self, epoch):
+        self.current_epoch = epoch
+        ratio = self.current_hard_neg_ratio()
+        if ratio > 0 and not self._hard_neg_announced:
+            self.logger.info('[HARD-NEG] active from epoch {}: ratio {:.2f} (target {:.2f})'.format(
+                epoch, ratio, self.hard_neg_ratio))
+            self._hard_neg_announced = True
+
+    def current_hard_neg_ratio(self):
+        if self.hard_neg_ratio <= 0:
+            return 0.0
+        if self.current_epoch < self.hard_neg_warmup_epochs:
+            return 0.0
+        if self.hard_neg_ramp_epochs <= 0:
+            return self.hard_neg_ratio
+        progress = min(1.0, (self.current_epoch - self.hard_neg_warmup_epochs + 1) / self.hard_neg_ramp_epochs)
+        return self.hard_neg_ratio * progress
 
     def inter_matrix(self, form='coo', value_field=None):
         """Get sparse matrix that describe interactions between user_id and item_id.
@@ -233,19 +263,19 @@ class TrainDataLoader(AbstractDataLoader):
                                   torch.unsqueeze(item_tensor, 0)))
         u_ids = cur_data[self.config['USER_ID_FIELD']]
         # sampling negative items only in the dataset (train)
-        neg_ids = self._sample_neg_ids(u_ids).to(self.device)
+        i_ids = cur_data[self.config['ITEM_ID_FIELD']]
+        neg_rows = self._sample_neg_ids(u_ids, i_ids).to(self.device)
         # for neighborhood loss
         if self.neighborhood_loss_required:
-            i_ids = cur_data[self.config['ITEM_ID_FIELD']]
             pos_neighbors, neg_neighbors = self._get_neighborhood_samples(i_ids, self.config['ITEM_ID_FIELD'])
             pos_neighbors, neg_neighbors = pos_neighbors.to(self.device), neg_neighbors.to(self.device)
 
-            batch_tensor = torch.cat((batch_tensor, neg_ids.unsqueeze(0),
+            batch_tensor = torch.cat((batch_tensor, neg_rows,
                                       pos_neighbors.unsqueeze(0), neg_neighbors.unsqueeze(0)))
 
         # merge negative samples
         else:
-            batch_tensor = torch.cat((batch_tensor, neg_ids.unsqueeze(0)))
+            batch_tensor = torch.cat((batch_tensor, neg_rows))
 
         return batch_tensor
 
@@ -264,15 +294,68 @@ class TrainDataLoader(AbstractDataLoader):
         self.pr += self.step
         return user_tensor
 
-    def _sample_neg_ids(self, u_ids):
-        neg_ids = []
-        for u in u_ids:
-            # random 1 item
-            iid = self._random()
-            while iid in self.history_items_per_u[u]:
-                iid = self._random()
-            neg_ids.append(iid)
-        return torch.tensor(neg_ids).type(torch.LongTensor)
+    def _sample_neg_ids(self, u_ids, pos_iids=None):
+        if pos_iids is None:
+            pos_iids = [None] * len(u_ids)
+
+        rows = []
+        for _ in range(self.num_negatives):
+            neg_ids = []
+            for u, pos_iid in zip(u_ids, pos_iids):
+                user_history = self.history_items_per_u[u]
+                iid = self._sample_hard_negative(pos_iid, user_history)
+                if iid is None:
+                    iid = self._random()
+                    while iid in user_history:
+                        iid = self._random()
+                neg_ids.append(iid)
+            rows.append(neg_ids)
+        return torch.tensor(rows).type(torch.LongTensor)
+
+    def _sample_hard_negative(self, pos_iid, user_history):
+        ratio = self.current_hard_neg_ratio()
+        if ratio <= 0.0 or pos_iid is None or random.random() > ratio:
+            return None
+
+        candidates = self._get_hard_neighbor_map().get(int(pos_iid), [])
+        if not candidates:
+            return None
+
+        for iid in random.sample(candidates, len(candidates)):
+            if iid in self.all_items_set and iid not in user_history:
+                return iid
+        return None
+
+    def _get_hard_neighbor_map(self):
+        if self.item_hard_neighbors is None:
+            self.item_hard_neighbors = self._load_item_hard_neighbors()
+        return self.item_hard_neighbors
+
+    def _load_item_hard_neighbors(self):
+        dataset_path = os.path.abspath(self.config['data_path'] + self.config['dataset'])
+        knn_k = self.config['knn_k'] if self.config['knn_k'] is not None else 10
+        mm_adj_file = os.path.join(dataset_path, 'mm_adj_{}.pt'.format(knn_k))
+        if not os.path.isfile(mm_adj_file):
+            self.logger.warning('[HARD-NEG] item graph not found, falling back to random negatives: {}'.format(mm_adj_file))
+            return {}
+
+        try:
+            mm_adj = torch.load(mm_adj_file, map_location='cpu').coalesce()
+        except Exception as exc:
+            self.logger.warning('[HARD-NEG] failed to load item graph {}: {}'.format(mm_adj_file, exc))
+            return {}
+
+        rows, cols = mm_adj.indices()
+        neighbors = {}
+        for row, col in zip(rows.tolist(), cols.tolist()):
+            if row == col:
+                continue
+            neighbors.setdefault(row, []).append(col)
+        if neighbors:
+            avg_deg = sum(len(v) for v in neighbors.values()) / len(neighbors)
+            self.logger.info('[HARD-NEG] loaded lookalike lists for {} items (avg {:.1f} neighbors) from {}'.format(
+                len(neighbors), avg_deg, os.path.basename(mm_adj_file)))
+        return neighbors
 
     def _get_my_neighbors(self, id_str):
         ret_dict = {}
