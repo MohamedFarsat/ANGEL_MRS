@@ -1,4 +1,6 @@
-# MMRec
+# Hybrid MMGF + MENTOR (Farsat)
+
+This implementation builds on MMRec and includes the Hybrid MMGF + MENTOR work.
 
 <div align="center">
   <a href="https://github.com/enoche/MultimodalRecSys"><img width="300px" height="auto" src="https://github.com/enoche/MMRec/blob/master/images/logo.png"></a>
