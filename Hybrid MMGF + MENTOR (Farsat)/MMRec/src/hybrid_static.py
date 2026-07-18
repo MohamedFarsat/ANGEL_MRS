@@ -230,6 +230,10 @@ def run(args):
         config_dict['eval_batch_size'] = args.eval_batch_size
     if args.train_batch_size is not None:
         config_dict['train_batch_size'] = args.train_batch_size
+    for key in ['loss_type', 'num_negatives', 'ssm_temp', 'hard_neg_ratio']:
+        value = getattr(args, key)
+        if value is not None:
+            config_dict[key] = value
 
     config = Config(args.trained_model, args.dataset, config_dict)
     materialize_first_hyperparams(config)
@@ -274,6 +278,10 @@ def build_arg_parser():
     parser.add_argument('--epochs', type=int, default=None)
     parser.add_argument('--train_batch_size', type=int, default=None)
     parser.add_argument('--eval_batch_size', type=int, default=None)
+    parser.add_argument('--loss_type', type=str, default=None, choices=['bpr', 'softmax'])
+    parser.add_argument('--num_negatives', type=int, default=None)
+    parser.add_argument('--ssm_temp', type=float, default=None)
+    parser.add_argument('--hard_neg_ratio', type=float, default=None)
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--no_cuda', action='store_true')
     return parser
