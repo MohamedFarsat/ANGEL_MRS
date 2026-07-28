@@ -69,6 +69,18 @@ class MENTOR(GeneralRecommender):
         # ===== [SSM] ranking loss: 'bpr' (original) or 'softmax' over K sampled negatives =====
         self.loss_type = (config['loss_type'] or 'bpr').lower()
         self.ssm_temp = float(config['ssm_temp'] or 1.0)
+        self.hard_bpr_weight = float(config['hard_bpr_weight'] or 0.0)
+        # [DNS] dynamic hard-negative selection: dataloader draws num_negatives as a POOL,
+        # the loss keeps only the dns_keep highest-scoring ones (0 = off, use all).
+        # dns_veto additionally excludes the positive's content-kNN lookalikes from
+        # selection (mm_adj as a false-negative filter rather than a negative source).
+        self.dns_keep = int(config['dns_keep'] or 0)
+        self.dns_random_keep = int(config['dns_random_keep'] or 0)
+        self.dns_strategy = (config['dns_strategy'] or 'hard').lower()
+        if self.dns_strategy not in ('hard', 'semi_hard', 'mixed_semi_hard'):
+            raise ValueError('Unsupported dns_strategy: {}'.format(self.dns_strategy))
+        self.dns_veto = bool(config['dns_veto'])
+        self._lookalike_ids = None
         # ===== [SSM] end =====
         self.drop_rate = 0.1
         self.v_rep = None
@@ -469,6 +481,23 @@ class MENTOR(GeneralRecommender):
         guide_item = self.result_embed_guide[self.n_users + item_ids_matrix]   # [K, B, D]
         guide_scores = (guide_user.unsqueeze(0) * guide_item).sum(dim=-1)      # [K, B]
         return scores + self.id_residual_scale() * guide_scores
+
+    # ===== [DNS] padded per-item lookalike table from mm_adj (for the veto filter) =====
+    def _build_lookalike_table(self):
+        adj = self.mm_adj.coalesce()
+        rows, cols = adj.indices()
+        keep = rows != cols                       # drop self-loops
+        rows, cols = rows[keep], cols[keep]
+        counts = torch.bincount(rows, minlength=self.num_item)
+        max_nb = int(counts.max().item()) if counts.numel() else 1
+        table = torch.full((self.num_item, max_nb), -1, dtype=torch.long, device=self.device)
+        order = torch.argsort(rows, stable=True)
+        r_sorted, c_sorted = rows[order], cols[order]
+        group_start = torch.cumsum(counts, 0) - counts
+        idx_in_group = torch.arange(len(r_sorted), device=self.device) - torch.repeat_interleave(group_start, counts)
+        table[r_sorted, idx_in_group] = c_sorted
+        return table                              # -1 padding never matches a real item id
+    # ===== [DNS] end =====
     # ===== [SSM] end =====
 
     def fit_Gaussian_dis(self):
@@ -489,10 +518,58 @@ class MENTOR(GeneralRecommender):
         # interaction rows: [user, pos, neg_1, ..., neg_K]; rows 2: are the K negative item ids.
         # (neighbourhood loss is off for MENTOR, so no extra trailing rows to worry about.)
         if self.loss_type == 'softmax':
-            neg_ids_matrix = interaction[2:]                                            # [K, B] item ids
-            all_neg_scores = self.score_user_items_multi(user, neg_ids_matrix)          # [K, B]
+            neg_ids_matrix = interaction[2:]                                            # [P, B] item ids
+            all_neg_scores = self.score_user_items_multi(user, neg_ids_matrix)          # [P, B]
+            # ---- [DNS] select a harder subset from the sampled negative pool ----
+            if 0 < self.dns_keep < neg_ids_matrix.shape[0]:
+                sel_scores = all_neg_scores
+                if self.dns_veto:
+                    # exclude the positive's content lookalikes: likely substitutes,
+                    # i.e. unobserved positives — never train against them as "hard"
+                    if self._lookalike_ids is None:
+                        self._lookalike_ids = self._build_lookalike_table()
+                    nb = self._lookalike_ids[interaction[1]]                            # [B, M]
+                    veto = (neg_ids_matrix.unsqueeze(-1) == nb.unsqueeze(0)).any(-1)    # [P, B]
+                    sel_scores = all_neg_scores.masked_fill(veto, float('-inf'))
+                if self.dns_strategy in ('semi_hard', 'mixed_semi_hard'):
+                    # Keep negatives that are confusing but still below the positive score.
+                    # If a user has fewer than dns_keep semi-hard candidates, fill the
+                    # remaining slots with ordinary hardest negatives so the batch keeps
+                    # the requested number of negatives.
+                    semi_mask = sel_scores < pos_scores.unsqueeze(0)                    # [P, B]
+                    semi_scores = sel_scores.masked_fill(~semi_mask, float('-inf'))
+                    top_idx = semi_scores.topk(self.dns_keep, dim=0).indices            # [K, B]
+                    picked_scores = semi_scores.gather(0, top_idx)
+                    fallback_idx = sel_scores.topk(self.dns_keep, dim=0).indices
+                    fallback_scores = sel_scores.gather(0, fallback_idx)
+                    picked_idx = torch.where(torch.isfinite(picked_scores),
+                                             top_idx, fallback_idx)
+                    picked_scores = torch.where(torch.isfinite(picked_scores),
+                                                picked_scores, fallback_scores)
+                    if self.dns_strategy == 'mixed_semi_hard' and self.dns_random_keep > 0:
+                        row_ids = torch.arange(sel_scores.shape[0], device=self.device).view(-1, 1)
+                        row_ids = row_ids.expand(-1, sel_scores.shape[1])               # [P, B]
+                        already_picked = (row_ids.unsqueeze(0) == picked_idx.unsqueeze(1)).any(0)
+                        available = (~already_picked) & torch.isfinite(sel_scores)
+                        # Rows are independent random samples from the dataloader, so the
+                        # first available rows are random negatives, not score-mined ones.
+                        random_rank = -row_ids.float().masked_fill(~available, float('inf'))
+                        random_keep = min(self.dns_random_keep, sel_scores.shape[0] - self.dns_keep)
+                        random_idx = random_rank.topk(random_keep, dim=0).indices       # [R, B]
+                        random_scores = sel_scores.gather(0, random_idx)
+                        all_neg_scores = torch.cat((picked_scores, random_scores), dim=0)
+                    else:
+                        all_neg_scores = picked_scores
+                else:
+                    top_idx = sel_scores.topk(self.dns_keep, dim=0).indices             # [K, B]
+                    all_neg_scores = sel_scores.gather(0, top_idx)                      # -inf-safe
+            # ---- [DNS] end ----
             logits = torch.cat((pos_scores.unsqueeze(0), all_neg_scores), dim=0)        # [K+1, B]
             loss_value = -torch.mean(F.log_softmax(logits / self.ssm_temp, dim=0)[0])
+            if self.hard_bpr_weight > 0:
+                hardest_neg_scores = all_neg_scores.max(dim=0).values
+                hard_bpr_loss = -torch.mean(F.logsigmoid(pos_scores - hardest_neg_scores))
+                loss_value = loss_value + self.hard_bpr_weight * hard_bpr_loss
         else:
             loss_value = -torch.mean(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
         # ===== [SSM] end =====

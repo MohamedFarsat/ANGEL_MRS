@@ -129,6 +129,16 @@ class TrainDataLoader(AbstractDataLoader):
         # ========== [MULTI-NEG] K negatives per interaction (1 = original behaviour) ==========
         self.num_negatives = int(config['num_negatives'] or 1)
         # ========== [MULTI-NEG] end ==========
+        # ========== [POP-NEG] popularity-balanced negative sampling ==========
+        self.pop_neg_ratio = float(config['pop_neg_ratio'] or 0.0)
+        self.pop_bucket_weights = (
+            float(config['pop_head_weight'] or 0.0),
+            float(config['pop_mid_weight'] or 0.0),
+            float(config['pop_tail_weight'] or 0.0),
+        )
+        self.pop_buckets = self._build_popularity_buckets() if self.pop_neg_ratio > 0 else None
+        self._pop_neg_announced = False
+        # ========== [POP-NEG] end ==========
         # if full sampling
         self.use_full_sampling = config['use_full_sampling']
 
@@ -171,6 +181,10 @@ class TrainDataLoader(AbstractDataLoader):
             self.logger.info('[HARD-NEG] active from epoch {}: ratio {:.2f} (target {:.2f})'.format(
                 epoch, ratio, self.hard_neg_ratio))
             self._hard_neg_announced = True
+        if self.pop_neg_ratio > 0 and not self._pop_neg_announced:
+            self.logger.info('[POP-NEG] active: ratio {:.2f}, bucket weights head/mid/tail = {:.2f}/{:.2f}/{:.2f}'.format(
+                self.pop_neg_ratio, *self.pop_bucket_weights))
+            self._pop_neg_announced = True
 
     def current_hard_neg_ratio(self):
         if self.hard_neg_ratio <= 0:
@@ -308,12 +322,61 @@ class TrainDataLoader(AbstractDataLoader):
                 user_history = self.history_items_per_u[u]
                 iid = self._sample_hard_negative(pos_iid, user_history)
                 if iid is None:
-                    iid = self._random()
-                    while iid in user_history:
-                        iid = self._random()
+                    iid = self._sample_popularity_negative(user_history)
+                if iid is None:
+                    iid = self._sample_uniform_negative(user_history)
                 neg_ids.append(iid)
             rows.append(neg_ids)
         return torch.tensor(rows).type(torch.LongTensor)
+
+    # ========== [POP-NEG] sampler internals ==========
+    def _build_popularity_buckets(self):
+        iid_field = self.dataset.iid_field
+        counts = self.dataset.df[iid_field].value_counts()
+        ranked_items = [int(i) for i in counts.index.tolist() if int(i) in self.all_items_set]
+        if not ranked_items:
+            return None
+
+        n_items = len(ranked_items)
+        head_end = max(1, int(0.2 * n_items))
+        tail_start = min(n_items, max(head_end, int(0.8 * n_items)))
+        buckets = {
+            'head': ranked_items[:head_end],
+            'mid': ranked_items[head_end:tail_start],
+            'tail': ranked_items[tail_start:],
+        }
+        if not buckets['mid']:
+            buckets['mid'] = ranked_items
+        if not buckets['tail']:
+            buckets['tail'] = ranked_items[-head_end:]
+
+        self.logger.info('[POP-NEG] buckets built from train popularity: head={}, mid={}, tail={}'.format(
+            len(buckets['head']), len(buckets['mid']), len(buckets['tail'])))
+        return buckets
+
+    def _sample_popularity_negative(self, user_history):
+        if self.pop_neg_ratio <= 0 or self.pop_buckets is None or random.random() > self.pop_neg_ratio:
+            return None
+
+        weights = self.pop_bucket_weights
+        if sum(weights) <= 0:
+            weights = (1.0, 1.0, 1.0)
+        bucket_name = random.choices(('head', 'mid', 'tail'), weights=weights, k=1)[0]
+        bucket = self.pop_buckets.get(bucket_name, [])
+        if not bucket:
+            return None
+
+        for iid in random.sample(bucket, min(len(bucket), 20)):
+            if iid not in user_history:
+                return iid
+        return None
+
+    def _sample_uniform_negative(self, user_history):
+        iid = self._random()
+        while iid in user_history:
+            iid = self._random()
+        return iid
+    # ========== [POP-NEG] end ==========
 
     # ========== [HARD-NEG] sampler internals ==========
     def _sample_hard_negative(self, pos_iid, user_history):

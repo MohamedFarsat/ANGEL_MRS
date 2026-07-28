@@ -19,12 +19,35 @@ mm_adj_refresh_interval: 0
 num_negatives: 1
 loss_type: 'bpr'
 ssm_temp: 1.0
+# hard_bpr_weight: optional auxiliary BPR loss against the highest-scoring
+# negative in the sampled pool. Use with loss_type='softmax' to keep all random
+# negatives while adding explicit hard-negative pressure.
+hard_bpr_weight: 0.0
+# ===== [POP-NEG] popularity-balanced negative sampling (not in original MENTOR) =====
+# pop_neg_ratio: probability that a negative comes from popularity buckets instead of
+# uniform random sampling. Buckets are built from train-set item frequencies:
+# head = top 20%, mid = middle 60%, tail = bottom 20%.
+pop_neg_ratio: 0.0
+pop_head_weight: 0.4
+pop_mid_weight: 0.4
+pop_tail_weight: 0.2
+# ===== [POP-NEG] end =====
+# [DNS] keep only the K hardest negatives from the sampled pool (0 = use all);
+# dns_strategy:
+#   hard      = keep highest-scoring negatives from the pool
+#   semi_hard = keep highest-scoring negatives below the positive score
+#   mixed_semi_hard = keep dns_keep semi-hard negatives + dns_random_keep random negatives
+# dns_veto excludes the positive's content lookalikes from selection
+dns_keep: 0
+dns_random_keep: 0
+dns_strategy: 'hard'
+dns_veto: False
 # ===== [SSM] end =====
 
 # ===== [HARD-NEG] content-guided hard negative sampling (not in original MENTOR) =====
 # Fraction of BPR negatives drawn from the positive item's kNN lookalikes (mm_adj).
 # 0.0 reproduces original MENTOR exactly (pure random negatives).
-hard_neg_ratio: 0.5
+hard_neg_ratio: 0.0
 hard_neg_warmup_epochs: 3   # epochs of pure random negatives first
 hard_neg_ramp_epochs: 5     # epochs to linearly ramp from 0 to hard_neg_ratio
 # ===== [HARD-NEG] end =====
